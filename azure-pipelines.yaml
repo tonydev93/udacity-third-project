@@ -1,0 +1,174 @@
+variables:
+  vmImageName: 'ubuntu-18.04'
+
+  fakeAppName: 'TonyTest-AppService'
+  # Environment name
+  environmentName: 'udacity-third-project'
+  # Project root folder. Point to the folder containing manage.py file.
+  projectRoot: $(System.DefaultWorkingDirectory)
+  python.version: '3.7.6'
+stages:
+- stage: Build
+  pool:
+    vmImage: $(vmImageName)
+  jobs:
+  - job: Build
+    steps:
+    # Needed for Terraform VM deployment
+    - script: | 
+        sudo npm install -g newman
+      workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/postman'
+      displayName: Install Newman
+
+    - script: | 
+        newman run -e Testing_Env.json -r junit,cli regression-test.postman_collection.json
+      workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/postman'
+      displayName: Perform Regression Test
+
+    - script: | 
+        newman run -e Testing_Env.json -r junit,cli data-validation-test.postman_collection.json
+      workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/postman'
+      displayName: Perform Data Validation Test
+
+    - task: PublishTestResults@2
+      inputs:
+        testResultsFormat: 'JUnit'
+        testResultsFiles: '*.xml'
+        searchFolder: '$(System.DefaultWorkingDirectory)/automatedtesting/postman/newman'
+        mergeTestResults: true
+        testRunTitle: 'Publish Newman Test Result'
+
+    - task: ArchiveFiles@2
+      displayName: 'Archive FakeRestAPI'
+      inputs:
+        rootFolderOrFile: '$(projectRoot)/automatedtesting/jmeter/fakerestapi'
+        includeRootFolder: false
+        archiveType: 'zip'
+        archiveFile: '$(Build.ArtifactStagingDirectory)/$(Build.BuildId)-fakerestapi.zip'
+    - publish: $(Build.ArtifactStagingDirectory)/$(Build.BuildId)-fakerestapi.zip
+      displayName: 'Upload Package'
+      artifact: drop-fakerestapi
+- stage: Deployment
+  pool:
+    vmImage: $(vmImageName)
+  jobs:
+  - job: BuildTerraform
+    steps: 
+    - script: |
+        mkdir temp
+      workingDirectory: '$(projectRoot)'
+      displayName: "Make temp folder"
+    - script: |
+        wget https://releases.hashicorp.com/terraform/1.1.9/terraform_1.1.9_linux_amd64.zip
+        sudo apt install unzip
+        unzip terraform_1.1.9_linux_amd64.zip 
+        sudo mv ./terraform /usr/bin/
+      workingDirectory: '$(projectRoot)/temp'
+      displayName: "Install Terraform"
+
+    - script: |
+        terraform init
+      workingDirectory: '$(projectRoot)/terraform'
+      displayName: Init Terraform
+    
+    - script: |
+        export TF_VAR_subscription_id='$(TF_VAR_SUBSCRIPTION_ID)'
+        export TF_VAR_client_id='$(TF_VAR_CLIENT_ID)'
+        export TF_VAR_client_secret='$(TF_VAR_CLIENT_SECRET)'
+        export TF_VAR_tenant_id='$(TF_VAR_TENANT_ID)'
+        terraform apply -auto-approve 
+      workingDirectory: '$(projectRoot)/terraform'
+      displayName: Deploy Terraform
+    - script: |
+        echo "##vso[task.setvariable variable=vm_public_ip;isOutput=true]$(terraform output -raw vm_public_ip_address)"
+      workingDirectory: '$(projectRoot)/terraform'
+      displayName: Export Vm public ip
+      name: VmPublicIp
+  
+  - deployment: DeployFakeRestAPI
+    dependsOn: BuildTerraform
+    condition: succeeded()
+    pool:
+      vmImage: $(vmImageName)
+    environment: $(environmentName)
+    strategy:
+      runOnce:
+        deploy:
+          steps:
+          - task: AzureWebApp@1
+            displayName: 'Deploy To Azure Web App'
+            inputs:
+              azureSubscription: "Azure subscription 1 (909fd74f-8f42-4221-b3dc-6ea5139035b8)"
+              appName: $(fakeAppName)
+              appType: webApp
+              package: $(Pipeline.Workspace)/drop-fakerestapi/$(Build.BuildId)-fakerestapi.zip
+
+  - job: SeleniumTesting
+    dependsOn: BuildTerraform
+    variables:
+      vm_public_ip: $[ dependencies.BuildTerraform.outputs['VmPublicIp.vm_public_ip'] ]
+    condition: succeeded()
+    pool:
+      vmImage: $(vmImageName)
+    steps:
+    - task: InstallSSHKey@0
+      inputs:
+        knownHostsEntry: '$(KNOWN_HOSTS_ENTRY)'
+        sshPublicKey: '$(PUBLIC_RSA_KEY)'
+        sshKeySecureFile: 'my_rsa_key'
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "ls -la"
+      workingDirectory: $(System.DefaultWorkingDirectory)
+      displayName: Testing ssh
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "sudo apt-get update; sudo apt-get upgrade -y; sudo apt install python3-pip unzip xvfb libxi6 libgconf-2-4 -y;"
+      workingDirectory: $(System.DefaultWorkingDirectory)
+      displayName: Vm install lib
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "pip3 install selenium"
+      workingDirectory: $(System.DefaultWorkingDirectory)
+      displayName: Install Selenium for UI testing
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) 'sudo curl -sS -o - https://dl-ssl.google.com/linux/linux_signing_key.pub | sudo apt-key add; sudo bash -c "echo 'deb [arch=amd64] http://dl.google.com/linux/chrome/deb/ stable main' >> /etc/apt/sources.list.d/google-chrome.list"; sudo apt -y update; sudo apt -y install google-chrome-stable;google-chrome --version'
+      workingDirectory: $(System.DefaultWorkingDirectory)
+      displayName: Install Chrome
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "wget https://chromedriver.storage.googleapis.com/103.0.5060.24/chromedriver_linux64.zip; unzip chromedriver_linux64.zip;sudo mv chromedriver /usr/bin/chromedriver; sudo chown root:root /usr/bin/chromedriver; sudo chmod +x /usr/bin/chromedriver;rm chromedriver_linux64.zip;chromedriver --version"
+      workingDirectory: $(System.DefaultWorkingDirectory)
+      displayName: Install driver for Chrome      
+    - script: | 
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "mkdir ~/selenium-testing"
+        scp login.py adminuser@$(vm_public_ip):~/selenium-testing/login.py
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "python3 ~/selenium-testing/login.py; sudo cp ~/seleniumTest /var/log/seleniumTest"
+      workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/selenium'
+      displayName: Perform Selenium Test
+
+  - job: JMeterTesting  
+    dependsOn: DeployFakeRestAPI
+    condition: succeeded()
+    steps:
+    - script: |
+        curl -X GET --header 'Accept: application/json' 'https://tonytest-appservice.azurewebsites.net/api/Activities'
+      workingDirectory: $(projectRoot)
+      displayName: Test Endpoint
+    - script: |
+        sudo apt install openjdk-11-jdk
+        wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
+        unzip apache-jmeter-5.5.zip
+        mkdir test-result
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter
+      displayName: Install Jmeter and dependencies
+    - script: |
+        wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
+        unzip apache-jmeter-5.5.zip
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/apache-jmeter-5.5/bin
+      displayName: Download Jmeter
+    - script: |
+        ../apache-jmeter-5.5/bin/jmeter -n -t ../stress-test.jmx -l log.jtl -j jmeter.log -e -o stress-test-report
+        rm -f jmeter.log log.jtl
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
+      displayName: Perform Stress Test
+    - script: |
+        ../apache-jmeter-5.5/bin/jmeter -n -t ../endurance-test.jmx -l log.jtl -j jmeter.log -e -o endurance-test-report
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
+      displayName: Perform Endurance Test
