@@ -140,6 +140,8 @@ stages:
         ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "mkdir ~/selenium-testing"
         scp login.py adminuser@$(vm_public_ip):~/selenium-testing/login.py
         ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "python3 ~/selenium-testing/login.py; sudo cp ~/seleniumTest /var/log/seleniumTest"
+        sudo mv selenium.log /var/log/seleniumTest/selenium-udacity.log
+        sudo chmod -R 775 /var/log/seleniumTest/selenium-udacity.log
       workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/selenium'
       displayName: Perform Selenium Test
 
@@ -158,7 +160,7 @@ stages:
         mkdir test-result
       workingDirectory: $(projectRoot)/automatedtesting/jmeter
       displayName: Install Jmeter and dependencies
-    - script: |
+    - script: | 
         wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
         unzip apache-jmeter-5.5.zip
       workingDirectory: $(projectRoot)/automatedtesting/jmeter/apache-jmeter-5.5/bin
