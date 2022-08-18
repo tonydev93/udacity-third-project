@@ -139,9 +139,7 @@ stages:
     - script: | 
         ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "mkdir ~/selenium-testing"
         scp login.py adminuser@$(vm_public_ip):~/selenium-testing/login.py
-        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "python3 ~/selenium-testing/login.py; sudo cp ~/seleniumTest /var/log/seleniumTest"
-        sudo mv selenium.log /var/log/seleniumTest/selenium-udacity.log
-        sudo chmod -R 775 /var/log/seleniumTest/selenium-udacity.log
+        ssh -o StrictHostKeyChecking=no adminuser@$(vm_public_ip) "python3 ~/selenium-testing/login.py; sudo cp ~/seleniumTest /var/log/seleniumTest; sudo chmod -R 775 /var/log/seleniumTest"
       workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/selenium'
       displayName: Perform Selenium Test
 
