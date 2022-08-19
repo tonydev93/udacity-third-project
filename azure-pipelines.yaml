@@ -143,32 +143,32 @@ stages:
       workingDirectory: '$(System.DefaultWorkingDirectory)/automatedtesting/selenium'
       displayName: Perform Selenium Test
 
-  # - job: JMeterTesting  
-  #   dependsOn: DeployFakeRestAPI
-  #   condition: succeeded()
-  #   steps:
-  #   - script: |
-  #       curl -X GET --header 'Accept: application/json' 'https://tonytest-appservice.azurewebsites.net/api/Activities'
-  #     workingDirectory: $(projectRoot)
-  #     displayName: Test Endpoint
-  #   - script: |
-  #       sudo apt install openjdk-11-jdk
-  #       wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
-  #       unzip apache-jmeter-5.5.zip
-  #       mkdir test-result
-  #     workingDirectory: $(projectRoot)/automatedtesting/jmeter
-  #     displayName: Install Jmeter and dependencies
-  #   - script: | 
-  #       wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
-  #       unzip apache-jmeter-5.5.zip
-  #     workingDirectory: $(projectRoot)/automatedtesting/jmeter/apache-jmeter-5.5/bin
-  #     displayName: Download Jmeter
-  #   - script: |
-  #       ../apache-jmeter-5.5/bin/jmeter -n -t ../stress-test.jmx -l log.jtl -j jmeter.log -e -o stress-test-report
-  #       rm -f jmeter.log log.jtl
-  #     workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
-  #     displayName: Perform Stress Test
-  #   - script: |
-  #       ../apache-jmeter-5.5/bin/jmeter -n -t ../endurance-test.jmx -l log.jtl -j jmeter.log -e -o endurance-test-report
-  #     workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
-  #     displayName: Perform Endurance Test
+  - job: JMeterTesting  
+    dependsOn: DeployFakeRestAPI
+    condition: succeeded()
+    steps:
+    - script: |
+        curl -X GET --header 'Accept: application/json' 'https://tonytest-appservice.azurewebsites.net/api/Activities'
+      workingDirectory: $(projectRoot)
+      displayName: Test Endpoint
+    - script: |
+        sudo apt install openjdk-11-jdk
+        wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
+        unzip apache-jmeter-5.5.zip
+        mkdir test-result
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter
+      displayName: Install Jmeter and dependencies
+    - script: | 
+        wget https://dlcdn.apache.org//jmeter/binaries/apache-jmeter-5.5.zip
+        unzip apache-jmeter-5.5.zip
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/apache-jmeter-5.5/bin
+      displayName: Download Jmeter
+    - script: |
+        ../apache-jmeter-5.5/bin/jmeter -n -t ../stress-test.jmx -l log.jtl -j jmeter.log -e -o stress-test-report
+        rm -f jmeter.log log.jtl
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
+      displayName: Perform Stress Test
+    - script: |
+        ../apache-jmeter-5.5/bin/jmeter -n -t ../endurance-test.jmx -l log.jtl -j jmeter.log -e -o endurance-test-report
+      workingDirectory: $(projectRoot)/automatedtesting/jmeter/test-result
+      displayName: Perform Endurance Test

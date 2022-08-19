@@ -63,6 +63,7 @@ def goHome():
 
 
 def addProduct():
+    
     log('Adding product!')
     try:
         WebDriverWait(browser, delay).until(
