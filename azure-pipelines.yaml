@@ -67,7 +67,7 @@ stages:
       displayName: "Install Terraform"
 
     - script: |
-        terraform init -migrate-state
+        terraform init -reconfigure
       workingDirectory: '$(projectRoot)/terraform'
       displayName: Init Terraform
     
